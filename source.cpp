@@ -85,6 +85,17 @@ class LTexture {
 
             SDL_RenderCopyEx( gRenderer, mTexture, clip, &renderQuad, angle, center, flip);
         }
+        void renderProjectile( int x, int y, SDL_Rect* clip = NULL, double angle = 0.0, SDL_Point* center = NULL, SDL_RendererFlip flip = SDL_FLIP_NONE ){
+            //RENDERS ONLY PROJECTILES
+            SDL_Rect renderQuad = { x, y, mWidth, mHeight };
+            if( clip != NULL )
+            {
+                renderQuad.w = SPRITE_SIZE_WIDTH/2;
+                renderQuad.h = SPRITE_SIZE_HEIGHT/2;
+            }
+
+            SDL_RenderCopyEx( gRenderer, mTexture, clip, &renderQuad, angle, center, flip);
+        }
 		int getWidth(){
             return mWidth;
         }
@@ -165,24 +176,48 @@ class Player {
         }
 };
 
-// class Tile {
-//     public:
-//         float mPosX;
-//         float mPosY;
-//         int tileType;
-    
-//     Tile(int type, int x, int y) { //Floor tile: pass in random
-//         tileType = type;
-//         mPosX = x;
-//         mPosY = y;
-//     }
+class Projectile {
+    public:
+        static const int PROJECTILE_WIDTH = SPRITE_SIZE_WIDTH/2;
+        static const int PROJECTILE_HEIGHT = SPRITE_SIZE_HEIGHT/2;
+        static const int PROJECTILE_VEL = 3;
+        float mPosX, mPosY;
 
+    Projectile(int mouseX, int mouseY){
+        mPosX = SCREEN_WIDTH/2 - PROJECTILE_WIDTH/2;
+        mPosY = SCREEN_HEIGHT/2 - PROJECTILE_HEIGHT/2;
 
-        
-//     void render() {
-//         gSpriteSheetTexture.render(mPosX, mPosY, &gSpriteClips[tileType]);
-//     }
-// }
+        float Dlen = sqrt(((mPosX - mouseX) * (mPosX - mouseX)) + ((mPosY - mouseY) * (mPosY - mouseY)));
+        mVelX = (mPosX - mouseX)/Dlen;
+        mVelY = (mPosY - mouseY)/Dlen;
+    }
+
+    void move() {
+        mPosX += -mVelX*PROJECTILE_VEL;
+        mPosY += -mVelY*PROJECTILE_VEL;
+    }
+
+    bool invalidPos() {
+        if((mPosX < -PROJECTILE_WIDTH) || mPosX > SCREEN_WIDTH || mPosY < -PROJECTILE_HEIGHT || mPosY > SCREEN_HEIGHT){
+            return true;
+        }
+        return false;
+    }
+
+    void render() {
+        gSpriteSheetTexture.renderProjectile(mPosX, mPosY, &gSpriteClips[14], 0.0, NULL, SDL_FLIP_NONE);
+    }
+
+    private:
+        float mVelX, mVelY;
+};
+
+Projectile createProjectile(){
+    int mouseX, mouseY;
+    SDL_GetMouseState(&mouseX, &mouseY);
+    Projectile p(mouseX, mouseY);
+    return p;
+}
 
 bool loadMedia(){
     bool success = true;
@@ -265,6 +300,12 @@ bool loadMedia(){
         gSpriteClips[13].y = 85;
         gSpriteClips[13].w = 8;
         gSpriteClips[13].h = 8;
+
+        // PROJECTILE
+        gSpriteClips[14].x = 31;
+        gSpriteClips[14].y = 56;
+        gSpriteClips[14].w = 4;
+        gSpriteClips[14].h = 4;
     }
     return success;
 }
@@ -290,7 +331,7 @@ bool init() {
 		if(!SDL_SetHint( SDL_HINT_RENDER_SCALE_QUALITY, "1")) {
 			printf( "Warning: Linear texture filtering not enabled!" );
 		}
-		gWindow = SDL_CreateWindow( "Window", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN );
+		gWindow = SDL_CreateWindow( "Accolade", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN );
 		if(gWindow == NULL) {
 			printf( "Window could not be created! SDL Error: %s\n", SDL_GetError() );
 			success = false;
@@ -345,7 +386,6 @@ int main(int argc, char* args[]){
                 tileMap[i][j] = rand()%2+10;
             }
         }
-
         for(int i = WORLD_OFFSET; i < WORLD_SIZE+WORLD_OFFSET; i++){
             for(int j = 0; j < WORLD_OFFSET; j++){
                 tileMap[i][j] = rand()%2+10;
@@ -354,7 +394,6 @@ int main(int argc, char* args[]){
                 tileMap[i][j] = rand()%2+10;
             }
         }
-
         for(int i = WORLD_OFFSET+WORLD_SIZE; i < WORLD_SIZE+(2*WORLD_OFFSET); i++) {
             for(int j = 0; j < WORLD_SIZE + (2*WORLD_OFFSET); j++){
                 tileMap[i][j] = rand()%2+10;
@@ -372,12 +411,12 @@ int main(int argc, char* args[]){
             }
         }
 
-        for(int i = 0; i < WORLD_SIZE+(2*WORLD_OFFSET); i++){
-            for(int j = 0; j < WORLD_SIZE+(2*WORLD_OFFSET); j++){
-                std::cout << tileMap[i][j];
-            }
-            std::cout << "\n";
-        }
+        // for(int i = 0; i < WORLD_SIZE+(2*WORLD_OFFSET); i++){
+        //     for(int j = 0; j < WORLD_SIZE+(2*WORLD_OFFSET); j++){
+        //         std::cout << tileMap[i][j];
+        //     }
+        //     std::cout << "\n";
+        // }
 
         int windowMap[WINDOW_SIZE][WINDOW_SIZE];
 
@@ -390,8 +429,8 @@ int main(int argc, char* args[]){
         bool playerRight = false;
 
         int playerAttack = 0;
-
-        int fireRate = 10;
+        int fireRate = 50;
+        std::vector<Projectile> projectiles;
 
         int cx = floor(WINDOW_SIZE/2);
         int cy = floor(WINDOW_SIZE/2);
@@ -416,7 +455,7 @@ int main(int argc, char* args[]){
                 if(e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT && playerAttack == 0){
                     playerAttack = fireRate;
                     player.state = 9;
-                    
+                    projectiles.push_back(createProjectile());
                 }
 
                 if(e.type == SDL_KEYDOWN && e.key.repeat == 0){
@@ -471,16 +510,22 @@ int main(int argc, char* args[]){
                 }
             }
 
-            // gSpriteSheetTexture.render(0, 0, &gSpriteClips[0]);
+            for(int i = 0; i < projectiles.size(); i++){
+                projectiles[i].move();
+                if(projectiles[i].invalidPos()){
+                    projectiles.erase(projectiles.begin()+i);
+                } else {
+                    projectiles[i].render();
+                }
+            }
 
             player.render();
 
-            //Render
 
             SDL_RenderPresent(gRenderer);
             // std::cout << player.curPosX << " " << player.curPosY << "\n";
             double time = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now()-start).count();
-            // std::cout << time/1000000 << "\n";
+            std::cout << 1/(time/1000000)*1000 << "\n";
         }
     }
     close();
