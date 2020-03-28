@@ -9,14 +9,15 @@
 #include <vector>
 #include <iostream>
 #include <cmath>
+#include <chrono>
 
-const int SCREEN_WIDTH = 1000;
-const int SCREEN_HEIGHT = 1000;
-const int SCREEN_FPS = 60;
+const int SCREEN_WIDTH = 900;
+const int SCREEN_HEIGHT = 900;
 
 const int WINDOW_SIZE = 15; // 15x15
 
-const int SPRITE_SIZE = std::min(SCREEN_WIDTH, SCREEN_HEIGHT)/16;
+const int SPRITE_SIZE_WIDTH = SCREEN_WIDTH/WINDOW_SIZE;
+const int SPRITE_SIZE_HEIGHT = SCREEN_HEIGHT/WINDOW_SIZE;
 
 const int WORLD_OFFSET = ceil(WINDOW_SIZE/2);
 const int WORLD_SIZE = 100;
@@ -38,7 +39,7 @@ class LTexture {
             free();
             SDL_Texture* newTexture = NULL;
             SDL_Surface* loadedSurface = IMG_Load(path.c_str());
-            SDL_SetColorKey(loadedSurface, SDL_TRUE, SDL_MapRGB(loadedSurface->format, 0, 0xFF, 0xFF));
+            SDL_SetColorKey(loadedSurface, SDL_TRUE, SDL_MapRGB(loadedSurface->format, 0xFF, 0xFF, 0xFF));
             newTexture = SDL_CreateTextureFromSurface(gRenderer, loadedSurface);
             mWidth = loadedSurface->w;
             mHeight = loadedSurface->h;
@@ -78,8 +79,8 @@ class LTexture {
             SDL_Rect renderQuad = { x, y, mWidth, mHeight };
             if( clip != NULL )
             {
-                renderQuad.w = SPRITE_SIZE;
-                renderQuad.h = SPRITE_SIZE;
+                renderQuad.w = SPRITE_SIZE_WIDTH;
+                renderQuad.h = SPRITE_SIZE_HEIGHT;
             }
 
             SDL_RenderCopyEx( gRenderer, mTexture, clip, &renderQuad, angle, center, flip);
@@ -97,19 +98,18 @@ class LTexture {
 		int mHeight;
 };
 
-LTexture gPlayerTexture;
-LTexture gTileTexture;
-
-SDL_Rect gSpriteClips[9];
+SDL_Rect gSpriteClips[100];
 LTexture gSpriteSheetTexture;
 
 class Player {
     public:
-        int curPosX = 30;
-        int curPosY = 30;
-        float mPosX = (SCREEN_WIDTH/2)-(SPRITE_SIZE/2);
-        float mPosY = (SCREEN_HEIGHT/2)-(SPRITE_SIZE/2);
+        float curPosX = 30;
+        float curPosY = 30;
+        float mPosX = (SCREEN_WIDTH/2)-(SPRITE_SIZE_WIDTH/2);
+        float mPosY = (SCREEN_HEIGHT/2)-(SPRITE_SIZE_HEIGHT/2);
+        float vel = 0.1;
         int direction = 1; // 0 is left, 1 is right
+        int state = 8; // 8 is normal, 9 is attack
 
         Player() {
             //Think of something to initialize
@@ -117,22 +117,51 @@ class Player {
         }
 
         void move(bool playerUp, bool playerDown, bool playerLeft, bool playerRight){
-            if(playerUp){
-                if(curPosY > 0) --curPosY;
-            }
-            if(playerDown){
-                if(curPosY < WORLD_SIZE-1) ++curPosY;
-            }
-            if(playerLeft){
-                if(curPosX > 0)--curPosX; direction = 0;
-            }
-            if(playerRight){
-                if(curPosX < WORLD_SIZE-1)++curPosX; direction = 1;
+            if((playerUp && playerLeft) || (playerUp && playerRight) || (playerDown && playerLeft) || (playerDown && playerRight)){
+                vel = 0.05;
+                if(playerUp){
+                    if(playerLeft){
+                        if(curPosY > 0) curPosY -= vel;
+                        if(curPosX > 0) curPosX -= vel; direction = 0;
+                    }
+                    if(playerRight){
+                        if(curPosY > 0) curPosY -= vel;
+                        if(curPosX < WORLD_SIZE-1) curPosX += vel; direction = 1;
+                    }
+                }   
+                if(playerDown){
+                    if(playerLeft){
+                        if(curPosY < WORLD_SIZE-1) curPosY += vel;
+                        if(curPosX > 0) curPosX -= vel; direction = 0;
+                    }
+                    if(playerRight){
+                        if(curPosY < WORLD_SIZE-1) curPosY += vel;  
+                        if(curPosX < WORLD_SIZE-1) curPosX += vel; direction = 1;
+                    }
+                }
+            } else {
+                vel = 0.1;
+                if(playerUp){
+                    if(curPosY > 0) curPosY -= vel;
+                }
+                if(playerDown){
+                    if(curPosY < WORLD_SIZE-1) curPosY += vel;
+                }
+                if(playerLeft){
+                    if(curPosX > 0) curPosX -= vel; direction = 0;
+                }
+                if(playerRight){
+                    if(curPosX < WORLD_SIZE-1) curPosX += vel; direction = 1;
+                }
             }
         }
 
         void render() {
-            gSpriteSheetTexture.render(mPosX, mPosY, &gSpriteClips[8]);
+            if(direction == 0){
+                gSpriteSheetTexture.render(mPosX, mPosY, &gSpriteClips[state], 0.0, NULL, SDL_FLIP_HORIZONTAL);
+            } else {
+                gSpriteSheetTexture.render(mPosX, mPosY, &gSpriteClips[state], 0.0, NULL, SDL_FLIP_NONE);
+            }
         }
 };
 
@@ -201,17 +230,47 @@ bool loadMedia(){
         gSpriteClips[7].w = 8;
         gSpriteClips[7].h = 8;
 
-        //PLAYER
+        //PLAYER DEFAULT
         gSpriteClips[8].x = 12;
         gSpriteClips[8].y = 1;
-        gSpriteClips[8].w = 7;
+        gSpriteClips[8].w = 8;
         gSpriteClips[8].h = 9;
+
+        // PLAYER ATTACK
+        gSpriteClips[9].x = 12;
+        gSpriteClips[9].y = 12;
+        gSpriteClips[9].w = 8;
+        gSpriteClips[9].h = 10;
+
+        // OUTSIDE WALL 1
+        gSpriteClips[10].x = 83;
+        gSpriteClips[10].y = 94;
+        gSpriteClips[10].w = 8;
+        gSpriteClips[10].h = 8;
+
+        // OUTSIDE WALL 2
+        gSpriteClips[11].x = 92;
+        gSpriteClips[11].y = 94;
+        gSpriteClips[11].w = 8;
+        gSpriteClips[11].h = 8;
+
+        // OBJECT WALL 1
+        gSpriteClips[12].x = 83;
+        gSpriteClips[12].y = 85;
+        gSpriteClips[12].w = 8;
+        gSpriteClips[12].h = 8;
+
+        // OBJECT WALL 2
+        gSpriteClips[13].x = 92;
+        gSpriteClips[13].y = 85;
+        gSpriteClips[13].w = 8;
+        gSpriteClips[13].h = 8;
     }
     return success;
 }
 
 void close() {
-    gPlayerTexture.free();
+    gSpriteSheetTexture.free();
     SDL_DestroyRenderer(gRenderer);
     SDL_DestroyWindow(gWindow);
     gWindow = NULL;
@@ -283,31 +342,35 @@ int main(int argc, char* args[]){
 
         for(int i = 0; i < WORLD_OFFSET; i++){
             for(int j = 0; j < WORLD_SIZE + (2*WORLD_OFFSET); j++){
-                tileMap[i][j] = -1;
+                tileMap[i][j] = rand()%2+10;
             }
         }
 
         for(int i = WORLD_OFFSET; i < WORLD_SIZE+WORLD_OFFSET; i++){
             for(int j = 0; j < WORLD_OFFSET; j++){
-                tileMap[i][j] = -1;
+                tileMap[i][j] = rand()%2+10;
             }
             for(int j = WORLD_OFFSET+WORLD_SIZE; j < WORLD_SIZE+(2*WORLD_OFFSET); j++){
-                tileMap[i][j] = -1;
+                tileMap[i][j] = rand()%2+10;
             }
         }
 
         for(int i = WORLD_OFFSET+WORLD_SIZE; i < WORLD_SIZE+(2*WORLD_OFFSET); i++) {
             for(int j = 0; j < WORLD_SIZE + (2*WORLD_OFFSET); j++){
-                tileMap[i][j] = -1;
+                tileMap[i][j] = rand()%2+10;
             }
         }
 
         for(int i = WORLD_OFFSET; i < WORLD_SIZE+WORLD_OFFSET; i++){
             for(int j = WORLD_OFFSET; j < WORLD_SIZE+WORLD_OFFSET; j++){
-                tileMap[i][j] = rand()%8;
+                int p = rand()%100;
+                if(p == 0 || p == 1){
+                    tileMap[i][j] = rand()%2+12;
+                } else {
+                    tileMap[i][j] = rand()%8;
+                }
             }
         }
-
 
         for(int i = 0; i < WORLD_SIZE+(2*WORLD_OFFSET); i++){
             for(int j = 0; j < WORLD_SIZE+(2*WORLD_OFFSET); j++){
@@ -315,8 +378,6 @@ int main(int argc, char* args[]){
             }
             std::cout << "\n";
         }
-
-
 
         int windowMap[WINDOW_SIZE][WINDOW_SIZE];
 
@@ -327,9 +388,24 @@ int main(int argc, char* args[]){
         bool playerDown = false;
         bool playerLeft = false;
         bool playerRight = false;
+
+        int playerAttack = 0;
+
+        int fireRate = 10;
+
+        int cx = floor(WINDOW_SIZE/2);
+        int cy = floor(WINDOW_SIZE/2);
         
         while(!quit){
-            while( SDL_PollEvent( &e ) != 0 ) {
+            createWindow(windowMap, round(player.curPosX), round(player.curPosY), tileMap);
+            auto start = std::chrono::high_resolution_clock::now();
+            if(playerAttack){
+                playerAttack--;
+                if(playerAttack == 0){
+                    player.state = 8;
+                }
+            }
+            while(SDL_PollEvent( &e ) != 0) {
                 if( e.type == SDL_QUIT ) {
                     quit = true;
                 } else if(e.type == SDL_KEYDOWN){
@@ -337,13 +413,30 @@ int main(int argc, char* args[]){
                         case SDLK_t: for(int i = 0; i < WINDOW_SIZE; i++){for(int j = 0; j < WINDOW_SIZE; j++){std::cout << windowMap[i][j] << " ";}std::cout << "\n";}; std::cout << "--";break;
                     }
                 }
+                if(e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT && playerAttack == 0){
+                    playerAttack = fireRate;
+                    player.state = 9;
+                    
+                }
 
                 if(e.type == SDL_KEYDOWN && e.key.repeat == 0){
                     switch(e.key.keysym.sym){
-                        case SDLK_w: if(player.curPosY > 0) playerUp = true; break;
-                        case SDLK_s: if(player.curPosY < WORLD_SIZE-1) playerDown = true; break;
-                        case SDLK_a: if(player.curPosX > 0) playerLeft = true; break;
-                        case SDLK_d: if(player.curPosX < WORLD_SIZE-1) playerRight = true; break;
+                        case SDLK_w: 
+                            if(player.curPosY > 0){
+                                playerUp = true; 
+                            }break;
+                        case SDLK_s: 
+                            if(player.curPosY < WORLD_SIZE-1){
+                                playerDown = true;
+                            }break;
+                        case SDLK_a:
+                            if(player.curPosX > 0){
+                                playerLeft = true; 
+                            }break;
+                        case SDLK_d: 
+                            if(player.curPosX < WORLD_SIZE-1){
+                                playerRight = true; 
+                            }break;
                     }
                 } else if(e.type == SDL_KEYUP && e.key.repeat == 0){
                     switch(e.key.keysym.sym){
@@ -354,18 +447,27 @@ int main(int argc, char* args[]){
                     }
                 }
             }
+
+            if(playerUp && (windowMap[cy-1][cx] == 12 || windowMap[cy-1][cx] == 13)){
+                playerUp = false;
+            }
+            if(playerDown && (windowMap[cy+1][cx] == 12 || windowMap[cy+1][cx] == 13)){
+                playerDown = false;
+            }
+            if(playerLeft && (windowMap[cy][cx-1] == 12 || windowMap[cy][cx-1] == 13)){
+                playerLeft = false;
+            }
+            if(playerRight && (windowMap[cy][cx+1] == 12 || windowMap[cy][cx+1] == 13)){
+                playerRight = false;
+            }
             player.move(playerUp, playerDown, playerLeft, playerRight);
 
-            SDL_SetRenderDrawColor(gRenderer, 0xFF, 0xFF, 0xFF, 0xFF);
+            SDL_SetRenderDrawColor(gRenderer, 0x00, 0x00, 0x00, 0x00);
             SDL_RenderClear(gRenderer);
-
-            createWindow(windowMap, player.curPosX, player.curPosY, tileMap);
 
             for(int i = 0; i < WINDOW_SIZE; i++){
                 for(int j = 0; j < WINDOW_SIZE; j++){
-                    if(windowMap[i][j] != -1){
-                        gSpriteSheetTexture.render(j*SPRITE_SIZE+(SPRITE_SIZE/2), i*SPRITE_SIZE+(SPRITE_SIZE/2), &gSpriteClips[windowMap[i][j]]);
-                    }
+                    gSpriteSheetTexture.render(j*SPRITE_SIZE_WIDTH, i*SPRITE_SIZE_HEIGHT, &gSpriteClips[windowMap[i][j]]);
                 }
             }
 
@@ -377,6 +479,8 @@ int main(int argc, char* args[]){
 
             SDL_RenderPresent(gRenderer);
             // std::cout << player.curPosX << " " << player.curPosY << "\n";
+            double time = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now()-start).count();
+            // std::cout << time/1000000 << "\n";
         }
     }
     close();
