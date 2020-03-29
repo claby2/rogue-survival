@@ -1,6 +1,8 @@
 #include <SDL2/SDL.h>
-#include <SDL2/SDL_image.h>
-#include <SDL2/SDL_ttf.h>
+#include "C:/MinGW/include/SDL2/SDL_image.h"
+#include "C:/MinGW/include/SDL2/SDL_ttf.h"
+// #include <SDL2/SDL_image.h>
+// #include <SDL2/SDL_ttf.h>
 #include <stdlib.h>
 #include <time.h>
 #include <stdio.h>
@@ -10,6 +12,7 @@
 #include <iostream>
 #include <cmath>
 #include <chrono>
+#include <cstring>
 
 const int SCREEN_WIDTH = 900;
 const int SCREEN_HEIGHT = 900;
@@ -19,7 +22,7 @@ const int WINDOW_SIZE = 15; // 15x15
 const int SPRITE_SIZE_WIDTH = SCREEN_WIDTH/WINDOW_SIZE;
 const int SPRITE_SIZE_HEIGHT = SCREEN_HEIGHT/WINDOW_SIZE;
 
-const int WORLD_OFFSET = ceil(WINDOW_SIZE/2);
+const int WORLD_OFFSET = (WINDOW_SIZE/2) + (WINDOW_SIZE%2);
 const int WORLD_SIZE = 100;
 
 SDL_Window* gWindow = NULL;
@@ -113,70 +116,6 @@ class LTexture {
 SDL_Rect gSpriteClips[100];
 LTexture gSpriteSheetTexture;
 
-class Player {
-    public:
-        float curPosX = 10;
-        float curPosY = 10;
-        float mPosX = (SCREEN_WIDTH/2)-(SPRITE_SIZE_WIDTH/2);
-        float mPosY = (SCREEN_HEIGHT/2)-(SPRITE_SIZE_HEIGHT/2);
-        float vel = 0.1;
-        int direction = 1; // 0 is left, 1 is right
-        int state = 8; // 8 is normal, 9 is attack
-
-        Player() {
-            //Think of something to initialize
-            //-> nah
-        }
-
-        void move(bool playerUp, bool playerDown, bool playerLeft, bool playerRight){
-            if((playerUp && playerLeft) || (playerUp && playerRight) || (playerDown && playerLeft) || (playerDown && playerRight)){
-                vel = 0.05;
-                if(playerUp){
-                    if(playerLeft){
-                        if(curPosY > 0) curPosY -= vel;
-                        if(curPosX > 0) curPosX -= vel; direction = 0;
-                    }
-                    if(playerRight){
-                        if(curPosY > 0) curPosY -= vel;
-                        if(curPosX < WORLD_SIZE-1) curPosX += vel; direction = 1;
-                    }
-                }   
-                if(playerDown){
-                    if(playerLeft){
-                        if(curPosY < WORLD_SIZE-1) curPosY += vel;
-                        if(curPosX > 0) curPosX -= vel; direction = 0;
-                    }
-                    if(playerRight){
-                        if(curPosY < WORLD_SIZE-1) curPosY += vel;  
-                        if(curPosX < WORLD_SIZE-1) curPosX += vel; direction = 1;
-                    }
-                }
-            } else {
-                vel = 0.1;
-                if(playerUp){
-                    if(curPosY > 0) curPosY -= vel;
-                }
-                if(playerDown){
-                    if(curPosY < WORLD_SIZE-1) curPosY += vel;
-                }
-                if(playerLeft){
-                    if(curPosX > 0) curPosX -= vel; direction = 0;
-                }
-                if(playerRight){
-                    if(curPosX < WORLD_SIZE-1) curPosX += vel; direction = 1;
-                }
-            }
-        }
-
-        void render() {
-            if(direction == 0){
-                gSpriteSheetTexture.render(mPosX, mPosY, &gSpriteClips[state], 0.0, NULL, SDL_FLIP_HORIZONTAL);
-            } else {
-                gSpriteSheetTexture.render(mPosX, mPosY, &gSpriteClips[state], 0.0, NULL, SDL_FLIP_NONE);
-            }
-        }
-};
-
 class Projectile {
     public:
         static const int PROJECTILE_WIDTH = SPRITE_SIZE_WIDTH/2;
@@ -197,7 +136,6 @@ class Projectile {
         mPosX += -mVelX*PROJECTILE_VEL;
         mPosY += -mVelY*PROJECTILE_VEL;
     }
-
 
     bool invalidPos(int windowMap[][WINDOW_SIZE]) {
         int x, y;
@@ -230,8 +168,178 @@ class Projectile {
         gSpriteSheetTexture.renderProjectile(mPosX, mPosY, &gSpriteClips[14], 0.0, NULL, SDL_FLIP_NONE);
     }
 
-    private:
+    protected:
         float mVelX, mVelY;
+};
+
+class enemyProjectile : public Projectile{
+    public: 
+        enemyProjectile(int enemyX, int enemyY, int playerX, int playerY) : Projectile(playerX, playerY){
+            mPosX = enemyX - PROJECTILE_WIDTH/2;
+            mPosY = enemyY - PROJECTILE_HEIGHT/2;
+
+            float Dlen = sqrt(((mPosX - playerX) * (mPosX - playerX)) + ((mPosY - playerY) * (mPosY - playerY)));
+            mVelX = (mPosX - playerX)/Dlen;
+            mVelY = (mPosY - playerY)/Dlen;
+        }
+};
+
+class Player {
+    public:
+        int PLAYER_MAX_HEALTH = 16;
+        int health = 8;
+        float curPosX = 10;
+        float curPosY = 10;
+        float mPosX = (SCREEN_WIDTH/2)-(SPRITE_SIZE_WIDTH/2);
+        float mPosY = (SCREEN_HEIGHT/2)-(SPRITE_SIZE_HEIGHT/2);
+        float vel = 0.1;
+        int direction = 1; // 0 is left, 1 is right
+        int state = 8; // 8 is normal, 9 is attack
+
+        Player() {
+            //Think of something to initialize
+            //-> nah
+        }
+
+        bool intersect(enemyProjectile b){
+            float x1 = mPosX + SPRITE_SIZE_WIDTH/2;
+            float y1 = mPosY + SPRITE_SIZE_HEIGHT/2;
+            int r1 = SPRITE_SIZE_WIDTH/2;
+
+            float x2 = b.mPosX + SPRITE_SIZE_WIDTH/4;
+            float y2 = b.mPosY + SPRITE_SIZE_WIDTH/4;
+            int r2 = SPRITE_SIZE_WIDTH/4;
+
+            if((x2-x1)*(x2-x1) + (y2-y1)*(y2-y1) <= (r1+r2)*(r1+r2)){
+                return true;
+            }
+            return false;
+        }
+
+        void move(bool playerUp, bool playerDown, bool playerLeft, bool playerRight){
+            if((playerUp && playerLeft) || (playerUp && playerRight) || (playerDown && playerLeft) || (playerDown && playerRight)){
+                vel = 0.05;
+                if(playerUp){
+                    if(playerLeft){
+                        if(curPosY > 0) curPosY -= vel;
+                        if(curPosX > 0) curPosX -= vel; direction = 0;
+                    }
+                    if(playerRight){
+                        if(curPosY > 0) curPosY -= vel;
+                        if(curPosX < WORLD_SIZE) curPosX += vel; direction = 1;
+                    }
+                }   
+                if(playerDown){
+                    if(playerLeft){
+                        if(curPosY < WORLD_SIZE) curPosY += vel;
+                        if(curPosX > 0) curPosX -= vel; direction = 0;
+                    }
+                    if(playerRight){
+                        if(curPosY < WORLD_SIZE) curPosY += vel;  
+                        if(curPosX < WORLD_SIZE) curPosX += vel; direction = 1;
+                    }
+                }
+            } else {
+                vel = 0.1;
+                if(playerUp){
+                    if(curPosY > 0) curPosY -= vel;
+                }
+                if(playerDown){
+                    if(curPosY < WORLD_SIZE) curPosY += vel;
+                }
+                if(playerLeft){
+                    if(curPosX > 0) curPosX -= vel; direction = 0;
+                }
+                if(playerRight){
+                    if(curPosX < WORLD_SIZE) curPosX += vel; direction = 1;
+                }
+            }
+        }
+
+        void render() {
+            if(direction == 0){
+                gSpriteSheetTexture.render(mPosX, mPosY, &gSpriteClips[state], 0.0, NULL, SDL_FLIP_HORIZONTAL);
+            } else {
+                gSpriteSheetTexture.render(mPosX, mPosY, &gSpriteClips[state], 0.0, NULL, SDL_FLIP_NONE);
+            }
+        }
+};
+
+class Enemy {
+    public:
+        int curPosX;
+        int curPosY;
+        // int windowPosX;
+        // int windowPosY;
+        int state = 0; //0 normal, 1 attacking
+
+        Enemy(int x, int y, int type, int rate) {
+            curPosX = x;
+            curPosY = y;
+            enemyType = type; 
+            enemyFireRate = rate;  
+        }
+
+        bool intersect(Projectile b, int windowPosX, int windowPosY){
+            float x1 = windowPosX + SPRITE_SIZE_WIDTH;
+            float y1 = windowPosY + SPRITE_SIZE_HEIGHT;
+            int r1 = SPRITE_SIZE_WIDTH/2;
+
+            float x2 = b.mPosX + SPRITE_SIZE_WIDTH/4;
+            float y2 = b.mPosY + SPRITE_SIZE_WIDTH/4;
+            int r2 = SPRITE_SIZE_WIDTH/4;
+
+            if((x2-x1)*(x2-x1) + (y2-y1)*(y2-y1) <= (r1+r2)*(r1+r2)){
+                return true;
+            }
+            return false;
+        }
+
+        bool shoot() {
+            enemyCooldown--;
+            if(enemyCooldown < enemyFireRate/4){
+                state = 1;
+            } else {
+                state = 0;
+            }
+            if(enemyCooldown == 0){ //Ready to fire
+                enemyCooldown = enemyFireRate;
+                return true;
+            }
+            return false;
+        }
+
+        void render(int windowPosX, int windowPosY) {
+            if(windowPosX >= (WINDOW_SIZE-1)/2) {
+                gSpriteSheetTexture.render(windowPosX*SPRITE_SIZE_WIDTH, windowPosY*SPRITE_SIZE_HEIGHT, &gSpriteClips[enemyType+state], 0.0, NULL, SDL_FLIP_HORIZONTAL);
+                
+            } else {
+                gSpriteSheetTexture.render(windowPosX*SPRITE_SIZE_WIDTH, windowPosY*SPRITE_SIZE_HEIGHT, &gSpriteClips[enemyType+state], 0.0, NULL, SDL_FLIP_NONE);
+            }
+        }
+
+    private:
+        int enemyType;
+        int enemyFireRate;
+        int enemyCooldown = enemyFireRate;
+
+};
+
+class healthBar {
+    public:
+
+        // healthBar() {
+
+        // }
+
+        void render(int currentHealth){
+            for(int i = 0; i < floor(currentHealth/2); i++){
+                gSpriteSheetTexture.render(i*SPRITE_SIZE_WIDTH, 0, &gSpriteClips[17], 0.0, NULL, SDL_FLIP_NONE);
+            }
+            if(currentHealth%2 != 0){
+                gSpriteSheetTexture.render((floor(currentHealth/2))*SPRITE_SIZE_WIDTH, 0, &gSpriteClips[18], 0.0, NULL, SDL_FLIP_NONE);
+            }
+        }
 };
 
 Projectile createProjectile(){
@@ -239,6 +347,16 @@ Projectile createProjectile(){
     SDL_GetMouseState(&mouseX, &mouseY);
     Projectile p(mouseX, mouseY);
     return p;
+}
+
+enemyProjectile createEnemyProjectile(int enemyX, int enemyY, int playerX, int playerY){
+    enemyProjectile ep(enemyX, enemyY, playerX, playerY);
+    return ep;
+}
+
+Enemy createEnemy(int x, int y, int type, int rate){
+    Enemy e(x, y, type, rate);
+    return e;
 }
 
 bool loadMedia(){
@@ -328,6 +446,30 @@ bool loadMedia(){
         gSpriteClips[14].y = 56;
         gSpriteClips[14].w = 4;
         gSpriteClips[14].h = 4;
+
+        // ENEMY WIZARD
+        gSpriteClips[15].x = 91;
+        gSpriteClips[15].y = 13;
+        gSpriteClips[15].w = 9;
+        gSpriteClips[15].h = 9;
+
+        // ENEMY WIZARD ATTACK
+        gSpriteClips[16].x = 91;
+        gSpriteClips[16].y = 2;
+        gSpriteClips[16].w = 8;
+        gSpriteClips[16].h = 8;
+
+        // FULL HEART
+        gSpriteClips[17].x = 80;
+        gSpriteClips[17].y = 56;
+        gSpriteClips[17].w = 5;
+        gSpriteClips[17].h = 4;
+
+        // HALF HEART
+        gSpriteClips[18].x = 86;
+        gSpriteClips[18].y = 56;
+        gSpriteClips[18].w = 5;
+        gSpriteClips[18].h = 4;
     }
     return success;
 }
@@ -432,6 +574,22 @@ int main(int argc, char* args[]){
             }
         }
 
+        int enemyMap[WORLD_SIZE+(2*WORLD_OFFSET)][WORLD_SIZE+(2*WORLD_OFFSET)];
+        std::vector<Enemy> enemies;
+
+        memset(enemyMap, 0, (WORLD_SIZE+(2*WORLD_OFFSET))*(WORLD_SIZE+(2*WORLD_OFFSET)));
+
+        for(int i = WORLD_OFFSET; i < WORLD_SIZE+WORLD_OFFSET; i++){
+            for(int j = WORLD_OFFSET; j < WORLD_SIZE+WORLD_OFFSET; j++){
+                if(!(tileMap[i][j] == 12 || tileMap[i][j] == 13)){
+                    int p = rand()%100;
+                    if(p >= 0 && p <= 1){
+                        enemies.push_back(createEnemy(j, i, 15, 100));
+                    }
+                }
+            }
+        }
+
         // for(int i = 0; i < WORLD_SIZE+(2*WORLD_OFFSET); i++){
         //     for(int j = 0; j < WORLD_SIZE+(2*WORLD_OFFSET); j++){
         //         std::cout << tileMap[i][j];
@@ -450,18 +608,25 @@ int main(int argc, char* args[]){
         bool playerRight = false;
 
         int playerAttack = 0;
-        int fireRate = 1;
+        int fireRate = 50;
         std::vector<Projectile> projectiles;
+
+        std::vector<enemyProjectile> enemyProjectiles;
 
         int cx = floor(WINDOW_SIZE/2); //centerx
         int cy = floor(WINDOW_SIZE/2); //centery
 
         int tx = player.curPosX;
         int ty = player.curPosY;
+
+        healthBar healthbar;
         
         while(!quit){
             for(int i = 0; i < projectiles.size(); i++){
                 projectiles[i].shift(tx, ty, round(player.curPosX), round(player.curPosY));
+            }
+            for(int i = 0; i < enemyProjectiles.size(); i++){
+                enemyProjectiles[i].shift(tx, ty, round(player.curPosX), round(player.curPosY));
             }
             createWindow(windowMap, round(player.curPosX), round(player.curPosY), tileMap);
             tx = round(player.curPosX);
@@ -490,21 +655,17 @@ int main(int argc, char* args[]){
                 if(e.type == SDL_KEYDOWN && e.key.repeat == 0){
                     switch(e.key.keysym.sym){
                         case SDLK_w: 
-                            if(player.curPosY > 0){
-                                playerUp = true; 
-                            }break;
+                            playerUp = true; 
+                            break;
                         case SDLK_s: 
-                            if(player.curPosY < WORLD_SIZE-1){
-                                playerDown = true;
-                            }break;
+                            playerDown = true;
+                            break;
                         case SDLK_a:
-                            if(player.curPosX > 0){
-                                playerLeft = true; 
-                            }break;
+                            playerLeft = true; 
+                            break;
                         case SDLK_d: 
-                            if(player.curPosX < WORLD_SIZE-1){
-                                playerRight = true; 
-                            }break;
+                            playerRight = true; 
+                            break;
                     }
                 } else if(e.type == SDL_KEYUP && e.key.repeat == 0){
                     switch(e.key.keysym.sym){
@@ -516,16 +677,18 @@ int main(int argc, char* args[]){
                 }
             }
 
-            if(playerUp && (windowMap[cy-1][cx] == 12 || windowMap[cy-1][cx] == 13)){
+            // std::cout << tx << " " << ty<< "\n";
+
+            if(playerUp && (windowMap[cy-1][cx] == 12 || windowMap[cy-1][cx] == 13 || !(ty > 1))){
                 playerUp = false;
             }
-            if(playerDown && (windowMap[cy+1][cx] == 12 || windowMap[cy+1][cx] == 13)){
+            if(playerDown && (windowMap[cy+1][cx] == 12 || windowMap[cy+1][cx] == 13) || !(ty < WORLD_SIZE+1)){
                 playerDown = false;
             }
-            if(playerLeft && (windowMap[cy][cx-1] == 12 || windowMap[cy][cx-1] == 13)){
+            if(playerLeft && (windowMap[cy][cx-1] == 12 || windowMap[cy][cx-1] == 13) || !(tx > 1)){
                 playerLeft = false;
             }
-            if(playerRight && (windowMap[cy][cx+1] == 12 || windowMap[cy][cx+1] == 13)){
+            if(playerRight && (windowMap[cy][cx+1] == 12 || windowMap[cy][cx+1] == 13) || !(tx < WORLD_SIZE+1)){
                 playerRight = false;
             }
             player.move(playerUp, playerDown, playerLeft, playerRight);
@@ -539,6 +702,31 @@ int main(int argc, char* args[]){
                 }
             }
 
+            player.render();  
+
+            for(int i = 0; i < enemies.size(); i++){
+                bool hit = false;
+                for(int j = 0; j < projectiles.size(); j++){
+                    if(enemies[i].intersect(projectiles[j],(enemies[i].curPosX-tx-1)*SPRITE_SIZE_WIDTH+(SPRITE_SIZE_WIDTH/2), (enemies[i].curPosY-ty-1)*SPRITE_SIZE_HEIGHT+(SPRITE_SIZE_HEIGHT/2))){
+                        if(player.health < player.PLAYER_MAX_HEALTH){
+                            player.health++;
+                        }
+                        projectiles.erase(projectiles.begin()+j);
+                        enemies.erase(enemies.begin()+i);
+                        hit = true;
+                        break;
+                    }
+                }
+                if(!hit){
+                    if(enemies[i].curPosX >= tx && enemies[i].curPosX < tx+WINDOW_SIZE && enemies[i].curPosY >= ty && enemies[i].curPosY < ty+WINDOW_SIZE){
+                        if(enemies[i].shoot()){
+                            enemyProjectiles.push_back(createEnemyProjectile((enemies[i].curPosX-tx)*SPRITE_SIZE_WIDTH+(SPRITE_SIZE_WIDTH/2), (enemies[i].curPosY-ty)*SPRITE_SIZE_HEIGHT+(SPRITE_SIZE_HEIGHT/2), SCREEN_WIDTH/2, SCREEN_HEIGHT/2));
+                        }
+                        enemies[i].render(enemies[i].curPosX-tx, enemies[i].curPosY-ty);
+                    }
+                }
+            }      
+
             for(int i = 0; i < projectiles.size(); i++){
                 projectiles[i].move();
                 if(projectiles[i].invalidPos(windowMap)){
@@ -548,9 +736,27 @@ int main(int argc, char* args[]){
                 }
             }
 
-            player.render();
+            for(int i = 0; i < enemyProjectiles.size(); i++){
+                if(player.intersect(enemyProjectiles[i])){
+                    enemyProjectiles.erase(enemyProjectiles.begin()+i);
+                    player.health--;
+                } else {
+                    enemyProjectiles[i].move();
+                    if(enemyProjectiles[i].invalidPos(windowMap)){
+                        enemyProjectiles.erase(enemyProjectiles.begin()+i);
+                    } else {
+                        enemyProjectiles[i].render();
+                    }
+                }
+            }   
 
+            if(player.health <= 0){
+                std::cout << "DIED" << "\n";
+                close();
+                return 0;
+            } 
 
+            healthbar.render(player.health);
             SDL_RenderPresent(gRenderer);
             // std::cout << player.curPosX << " " << player.curPosY << "\n";
             double time = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now()-start).count();
