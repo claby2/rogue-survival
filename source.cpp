@@ -25,6 +25,7 @@ const int WORLD_SIZE = 100;
 SDL_Window* gWindow = NULL;
 SDL_Renderer* gRenderer = NULL;
 
+
 class LTexture {
 	public:
 		LTexture() {
@@ -114,8 +115,8 @@ LTexture gSpriteSheetTexture;
 
 class Player {
     public:
-        float curPosX = 30;
-        float curPosY = 30;
+        float curPosX = 10;
+        float curPosY = 10;
         float mPosX = (SCREEN_WIDTH/2)-(SPRITE_SIZE_WIDTH/2);
         float mPosY = (SCREEN_HEIGHT/2)-(SPRITE_SIZE_HEIGHT/2);
         float vel = 0.1;
@@ -180,7 +181,7 @@ class Projectile {
     public:
         static const int PROJECTILE_WIDTH = SPRITE_SIZE_WIDTH/2;
         static const int PROJECTILE_HEIGHT = SPRITE_SIZE_HEIGHT/2;
-        static const int PROJECTILE_VEL = 3;
+        static const int PROJECTILE_VEL = 10;
         float mPosX, mPosY;
 
     Projectile(int mouseX, int mouseY){
@@ -197,11 +198,32 @@ class Projectile {
         mPosY += -mVelY*PROJECTILE_VEL;
     }
 
-    bool invalidPos() {
-        if((mPosX < -PROJECTILE_WIDTH) || mPosX > SCREEN_WIDTH || mPosY < -PROJECTILE_HEIGHT || mPosY > SCREEN_HEIGHT){
+
+    bool invalidPos(int windowMap[][WINDOW_SIZE]) {
+        int x, y;
+        x = (int)(ceil(mPosX/SPRITE_SIZE_WIDTH));
+        y = (int)(ceil(mPosY/SPRITE_SIZE_HEIGHT));
+        if(((mPosX < -PROJECTILE_WIDTH) || mPosX > SCREEN_WIDTH || mPosY < -PROJECTILE_HEIGHT || mPosY > SCREEN_HEIGHT) || windowMap[y-1][x-1] >= 10 && windowMap[y-1][x-1] <= 13){
             return true;
         }
         return false;
+    }
+
+    void shift(int tx, int ty, int nx, int ny){;
+        int dx = nx-tx; //Positive means gone right
+        int dy = ny-ty; //Negative means gone left
+
+        if(dx > 0){ //Gone Right, Move Left
+            mPosX -= (dx*SPRITE_SIZE_WIDTH);
+        } else if(dx < 0){
+            mPosX += (abs(dx)*SPRITE_SIZE_WIDTH);
+        }
+
+        if(dy > 0){ //Gone Down, Move Up
+            mPosY -= (dy*SPRITE_SIZE_HEIGHT);
+        } else if(dy < 0){
+            mPosY += (abs(dy)*SPRITE_SIZE_HEIGHT);
+        }
     }
 
     void render() {
@@ -222,7 +244,7 @@ Projectile createProjectile(){
 bool loadMedia(){
     bool success = true;
 
-    if(!gSpriteSheetTexture.loadFromFile("images/8x.png")){
+    if(!gSpriteSheetTexture.loadFromFile("images/8xn.png")){
         printf("Failed to load sprite sheet texture!\n");
     } else {
         gSpriteClips[0].x = 56;
@@ -368,7 +390,6 @@ void createWindow(int windowMap[][WINDOW_SIZE], int xx, int yy, int tileMap[][WO
     }
 }
 
-
 int main(int argc, char* args[]){
     srand((unsigned)time(NULL));
     if(!init()){
@@ -403,7 +424,7 @@ int main(int argc, char* args[]){
         for(int i = WORLD_OFFSET; i < WORLD_SIZE+WORLD_OFFSET; i++){
             for(int j = WORLD_OFFSET; j < WORLD_SIZE+WORLD_OFFSET; j++){
                 int p = rand()%100;
-                if(p == 0 || p == 1){
+                if(p >=0 && p <= 3){
                     tileMap[i][j] = rand()%2+12;
                 } else {
                     tileMap[i][j] = rand()%8;
@@ -429,14 +450,22 @@ int main(int argc, char* args[]){
         bool playerRight = false;
 
         int playerAttack = 0;
-        int fireRate = 50;
+        int fireRate = 1;
         std::vector<Projectile> projectiles;
 
-        int cx = floor(WINDOW_SIZE/2);
-        int cy = floor(WINDOW_SIZE/2);
+        int cx = floor(WINDOW_SIZE/2); //centerx
+        int cy = floor(WINDOW_SIZE/2); //centery
+
+        int tx = player.curPosX;
+        int ty = player.curPosY;
         
         while(!quit){
+            for(int i = 0; i < projectiles.size(); i++){
+                projectiles[i].shift(tx, ty, round(player.curPosX), round(player.curPosY));
+            }
             createWindow(windowMap, round(player.curPosX), round(player.curPosY), tileMap);
+            tx = round(player.curPosX);
+            ty = round(player.curPosY);
             auto start = std::chrono::high_resolution_clock::now();
             if(playerAttack){
                 playerAttack--;
@@ -512,7 +541,7 @@ int main(int argc, char* args[]){
 
             for(int i = 0; i < projectiles.size(); i++){
                 projectiles[i].move();
-                if(projectiles[i].invalidPos()){
+                if(projectiles[i].invalidPos(windowMap)){
                     projectiles.erase(projectiles.begin()+i);
                 } else {
                     projectiles[i].render();
@@ -525,7 +554,7 @@ int main(int argc, char* args[]){
             SDL_RenderPresent(gRenderer);
             // std::cout << player.curPosX << " " << player.curPosY << "\n";
             double time = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now()-start).count();
-            std::cout << 1/(time/1000000)*1000 << "\n";
+            // std::cout << 1/(time/1000000)*1000 << "\n";
         }
     }
     close();
