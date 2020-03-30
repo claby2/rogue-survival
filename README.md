@@ -1,4 +1,4 @@
-# sdl-roguelike
+# Rogue Survival
 A 'roguelike' game with randomly generated levels made with SDL.
 
 ![Preview](thumbnail.png)
