@@ -2,14 +2,14 @@
 A 'roguelike' game with randomly generated levels made with SDL.
 
 ![Preview](thumbnail.png)
-
-# Controls
-**W** - Move Up
-
-**A** - Move Left
-
-**S** - Move Down
-
-**D** - Move Right
-
-**Left Click** - Attack
+### Dependencies
+```
+SDL2
+SDL2_image
+SDL2_ttf
+```
+### Build and Run
+```
+$ g++ source.cpp -w -lSDL2main -lSDL2 -lSDL2_image -lSDL2_ttf -o source
+$ ./source
+```
